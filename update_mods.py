@@ -108,6 +108,16 @@ def check_online_version(modid, game_version):
 
                 # Przejdź przez wszystkie releasy i zbierz kompatybilne
                 for release in mod_data['mod']['releases']:
+                    # Pomijamy wersje testowe (rc, pre, alpha, beta) – na ModDB
+                    # są w sekcji "For testers". packaging rozpoznaje je
+                    # automatycznie, np. "2.0.0-rc.1" -> 2.0.0rc1 (is_prerelease = True)
+                    try:
+                        if version.parse(release['modversion']).is_prerelease:
+                            print(f"  Wersja {release['modversion']} - pominięta (wersja testowa)")
+                            continue
+                    except version.InvalidVersion:
+                        pass  # nietypowy format wersji – sprawdzamy dalej jak dotąd                    # Sprawdź czy release ma wymagania gry w tagach
+                    
                     # Sprawdź czy release ma wymagania gry w tagach
                     game_req = None
                     supported_versions = []
