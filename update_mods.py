@@ -1,25 +1,48 @@
 #!/usr/bin/env python3
 import os
+import sys       # NOWE
 import json
+import argparse  # NOWE
 import zipfile
 import requests
 from packaging import version
 
-def get_game_version():
-    """Odczytuje wersję gry z pliku game_version.txt"""
+def parse_args():
+    """Parsuje parametry wiersza poleceń.
+
+    Wszystkie parametry są opcjonalne - bez nich skrypt działa w bieżącym
+    katalogu i tam szuka plików konfiguracyjnych (game_version.txt).
+    """
+    parser = argparse.ArgumentParser(
+        description="Aktualizuje mody Vintage Story z ModDB (mods.vintagestory.at)")
+    parser.add_argument('--mods-dir', default='.',
+                        help="katalog z modami (domyślnie: bieżący katalog)")
+    parser.add_argument('--game-version',
+                        help="wersja gry podana wprost, np. 1.22.0 (ma pierwszeństwo przed plikiem)")
+    parser.add_argument('--game-version-file',
+                        help="plik z wersją gry (domyślnie: <mods-dir>/game_version.txt)")
+    args = parser.parse_args()
+
+    # Domyślna ścieżka zależy od --mods-dir, więc ustalamy ją dopiero po parsowaniu
+    if not args.game_version_file:
+        args.game_version_file = os.path.join(args.mods_dir, 'game_version.txt')
+    return args
+
+def get_game_version(path):
+    """Odczytuje wersję gry z podanego pliku tekstowego"""
     try:
-        with open('/home/vintagestory/game_version.txt', 'r') as f:
+        with open(path, 'r') as f:
             game_ver = f.read().strip()
             print(f"Wykryta wersja gry: {game_ver}")
             return game_ver
     except FileNotFoundError:
-        print("BŁĄD: Nie znaleziono pliku game_version.txt")
-        print("Utwórz plik game_version.txt z numerem wersji gry (np. 1.20.12)")
+        print(f"BŁĄD: Nie znaleziono pliku {path}")
+        print("Utwórz go z numerem wersji gry (np. 1.22.0) albo użyj --game-version")
         exit(1)
     except Exception as e:
-        print(f"Błąd odczytu game_version.txt: {e}")
+        print(f"Błąd odczytu {path}: {e}")
         exit(1)
-
+        
 def is_version_compatible(mod_requirement, game_version):
     """Sprawdza czy wersja moda jest kompatybilna z wersją gry"""
     try:
@@ -187,7 +210,7 @@ def update_mod(mod_info):
     modid = mod_info['modid']
 
     # Tworzenie nazw plików z uwzględnieniem wersji
-    new_filename = f"{modid}_v{mod_info['available']}.zip"
+    new_filename = os.path.join(os.path.dirname(old_file), f"{modid}_v{mod_info['available']}.zip")
 
     print(f"\nAktualizuję {mod_info['name']}:")
     print(f"- Pobieram nową wersję jako: {new_filename}")
@@ -210,20 +233,34 @@ def update_mod(mod_info):
         return False
 
 def main():
-    # Wczytaj wersję gry
-    game_version = get_game_version()
+    # Konsola Windows (cp1250) nie obsługuje znaków ✓ ✗ ⚠ - wymuszamy UTF-8
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+
+    args = parse_args()
+    mods_dir = args.mods_dir
+
+    # Wersja gry: parametr ma pierwszeństwo przed plikiem
+    game_version = args.game_version or get_game_version(args.game_version_file)
 
     updates_available = []
     no_compatible_updates = []
 
     print(f"Sprawdzam aktualizacje modów dla gry wersji {game_version}...")
 
-    # Sprawdź każdy plik zip w bieżącym katalogu
-    for filename in os.listdir('.'):
+    # Sprawdź każdy plik zip w katalogu modów
+    if not os.path.isdir(mods_dir):
+        print(f"BŁĄD: Katalog modów nie istnieje: {mods_dir}")
+        exit(1)
+
+    for filename in os.listdir(mods_dir):
         if not filename.endswith('.zip') or filename.endswith('.zip_'):
             continue
 
-        mod_info = get_mod_info(filename)
+        # Pełna ścieżka - potrzebna, gdy skrypt nie jest uruchamiany w katalogu modów
+        filepath = os.path.join(mods_dir, filename)
+        mod_info = get_mod_info(filepath)    # Sprawdź każdy plik zip w bieżącym katalogu
+
         if not mod_info:
             print(f"Pominięto {filename} - nie znaleziono modinfo.json")
             continue
@@ -249,7 +286,7 @@ def main():
                         'available': online_data['version'],
                         'download_url': online_data['download_url'],
                         'game_requirement': online_data['game_requirement'],
-                        'filename': filename
+                        'filename': filepath
                     })
                     print(f"✓ Znaleziono kompatybilną aktualizację: {online_data['version']}")
                 else:
