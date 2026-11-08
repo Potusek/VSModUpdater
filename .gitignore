@@ -1,0 +1,19 @@
+# Pliki modów (pobierane, nie trzymamy ich w repo)
+*.zip
+*.zip_
+
+# Konfiguracja lokalna serwera
+game_version.txt
+mod_exclusions.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Edytory / system
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
